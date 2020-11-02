@@ -15,10 +15,11 @@ const (
 )
 
 var (
-	CronList []cronItem    //定时列表
-	record   itemRecord    //执行记录
-	MaxTasks int           //最大任务数量
-	TaskChan chan struct{} //任务携程
+	CronList  []cronItem    //定时列表
+	record    itemRecord    //执行记录
+	MaxTasks  int           //最大任务数量
+	TaskChan  chan struct{} //任务携程
+	taskDebug bool          //是否调试模式
 )
 
 // 执行记录
@@ -64,6 +65,11 @@ func init() {
 	CronList = make([]cronItem, 0)
 	record.m = make(map[string]struct{}, 0)
 
+}
+
+// 开启调试模式
+func StartDebug() {
+	taskDebug = true
 }
 
 // 执行定时服务
@@ -217,7 +223,9 @@ func serverGo() {
 	}()
 	select {
 	case <-time.After(time.Second): //每秒执行一次
-		//log.Println("正在执行携程数量:", len(TaskChan))
+		if taskDebug {
+			log.Println("正在执行携程数量:", len(TaskChan))
+		}
 		select {
 		case TaskChan <- struct{}{}:
 			go doCronList()

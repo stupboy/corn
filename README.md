@@ -1,3 +1,10 @@
+
+
+### 安装
+```golang
+  go get github.com/stupboy/corn
+```
+
 ### 参考centos定时写法
 - [* * * * * * 秒 分 时 日 周 月]
 - [* * * * * * 为每秒执行一次]
@@ -21,8 +28,8 @@ import (
 func init(){
 	corn.AddCorn(test,"*/5 * * * * *","test")
 	corn.AddCorn(test1,"*/2 * * * * *","test1")
-    //corn.RunCorn()
-	corn.RunCorn(100)
+    //corn.RunCorn(500)
+	corn.RunCorn()
 }
 
 func test(){

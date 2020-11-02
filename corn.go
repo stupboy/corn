@@ -72,16 +72,8 @@ func RunCorn(taskNum ...int) {
 		log.Println("定时任务数量必须大于2")
 	}
 	TaskChan = make(chan struct{}, MaxTasks)
-	go CronServer()
+	go CronServer() //开启定时携程
 }
-
-// 参考centos定时写法
-// * * * * * * 秒 分 时 日 周 月
-// * * * * * * 为每秒执行一次
-// 01 00 12 * * * 为秒为12时00分01秒时执行
-// 1-5 * * * * * 为秒为1-5时，每次都执行
-// 1,3,5 * * * * * 秒为 1 3 5时执行
-// */5 * * * * * 为每5秒执行一次
 
 // 添加定时列表
 func AddCorn(f func(), c ...string) {

@@ -8,6 +8,12 @@ import (
 	"time"
 )
 
+const (
+	TaskTimeOut    = 500 //任务超时分配时间
+	MinTaskNum     = 3   //最小携程数量不得小于3
+	DefaultTaskNum = 500 //默认携程数量
+)
+
 var (
 	CronList []cronItem    //定时列表
 	record   itemRecord    //执行记录
@@ -60,16 +66,15 @@ func init() {
 
 }
 
+// 执行定时服务
 func RunCorn(taskNum ...int) {
-	MaxTasks = 500
-	//              秒 分 时 日 周 月
-	//handle(Ping, "*/5 * * * * *", "Ping")
+	MaxTasks = DefaultTaskNum
 	if len(taskNum) > 0 {
 		MaxTasks = taskNum[0]
 	}
-	if MaxTasks < 3 {
-		MaxTasks = 3
-		log.Println("定时任务数量必须大于2")
+	if MaxTasks < MinTaskNum+len(CronList) {
+		MaxTasks = MinTaskNum + len(CronList)
+		log.Println("定时任务数量必须大于:", MinTaskNum+len(CronList))
 	}
 	TaskChan = make(chan struct{}, MaxTasks)
 	go CronServer() //开启定时携程
@@ -101,12 +106,15 @@ func doCronList() {
 			log.Println("定时任务出错")
 		}
 		<-TaskChan //列表携程退出
-		log.Println("携程数量0:", len(TaskChan))
 	}()
 	t := time.Now().Format("2006-01-02 15:04:05")
 	for _, i := range CronList {
-		TaskChan <- struct{}{} //列表携程明细
-		go analyzeCron(i, t)
+		select {
+		case TaskChan <- struct{}{}:
+			go analyzeCron(i, t)
+		case <-time.After(TaskTimeOut * time.Millisecond):
+			log.Println("任务被跳过:", i.c, i.key)
+		}
 	}
 }
 
@@ -118,7 +126,7 @@ func analyzeCron(item cronItem, t string) {
 			record.del(item.key)
 		}
 		<-TaskChan //定时明细退出
-		log.Println("携程数量:", len(TaskChan))
+		//log.Println("携程数量:", len(TaskChan))
 	}()
 	cs := strings.Split(item.c, " ")
 	if len(cs) != 6 {
@@ -195,23 +203,27 @@ func analyzeTime(a, b string) bool {
 
 // 定时服务
 func CronServer() {
-	var t int
 	for {
-		serverGo(&t)
+		serverGo()
 	}
 }
 
 // 服务携程
-func serverGo(t *int) {
+func serverGo() {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Println("错误", r)
-			*t = 0
 		}
 	}()
 	select {
-	case <-time.After(time.Second): //没秒执行一次
-		TaskChan <- struct{}{}
-		go doCronList()
+	case <-time.After(time.Second): //每秒执行一次
+		//log.Println("正在执行携程数量:", len(TaskChan))
+		select {
+		case TaskChan <- struct{}{}:
+			go doCronList()
+		case <-time.After(TaskTimeOut * time.Millisecond): //500毫秒内未分配则跳过定时
+			log.Println("任务执行队列已满，跳过时间点:", time.Now().Unix())
+			log.Println("正在执行携程数量:", len(TaskChan))
+		}
 	}
 }

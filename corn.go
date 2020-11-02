@@ -87,20 +87,17 @@ func RunCorn(taskNum ...int) {
 }
 
 // 添加定时列表
-func AddCorn(f func(), c ...string) {
+func AddCorn(f func(), TimeStr string, argus ...string) {
 	var (
 		key string
 	)
 	key = "none"
-	if len(c) < 1 {
-		return
-	}
-	if len(c) > 1 {
-		key = c[1]
+	if len(argus) > 0 {
+		key = argus[0]
 	}
 	CronList = append(CronList, cronItem{
 		f:   f,
-		c:   c[0],
+		c:   TimeStr,
 		key: key,
 	})
 }

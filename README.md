@@ -44,3 +44,9 @@ func main(){
 	select {}
 }
 ```
+
+### 动态修改定时方法
+```golang
+  AddIgnore("test")//增加定时任务限制
+  DelIgnore("teset")//取消定时任务限制
+```

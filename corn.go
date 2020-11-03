@@ -15,12 +15,23 @@ const (
 )
 
 var (
-	CronList  []cronItem    //定时列表
-	record    itemRecord    //执行记录
-	MaxTasks  int           //最大任务数量
-	TaskChan  chan struct{} //任务携程
-	taskDebug bool          //是否调试模式
+	CronList   []cronItem    //定时列表
+	record     itemRecord    //执行记录
+	MaxTasks   int           //最大任务数量
+	TaskChan   chan struct{} //任务携程
+	taskDebug  bool          //是否调试模式
+	ignoreList sync.Map      //跳过的map
 )
+
+// 添加跳过记录
+func AddIgnore(key string) {
+	ignoreList.Store(key, struct{}{})
+}
+
+// 删除跳过记录
+func DelIgnore(key string) {
+	ignoreList.Delete(key)
+}
 
 // 执行记录
 type itemRecord struct {
@@ -112,6 +123,10 @@ func doCronList() {
 	}()
 	t := time.Now().Format("2006-01-02 15:04:05")
 	for _, i := range CronList {
+		_, ok := ignoreList.Load(i.key)
+		if ok {
+			continue //在忽略列表中则退出
+		}
 		select {
 		case TaskChan <- struct{}{}:
 			go analyzeCron(i, t)
@@ -228,7 +243,7 @@ func serverGo() {
 			go doCronList()
 		case <-time.After(TaskTimeOut * time.Millisecond): //500毫秒内未分配则跳过定时
 			log.Println("任务执行队列已满，跳过时间点:", time.Now().Unix())
-			log.Println("正在执行携程数量:", len(TaskChan))
+			log.Println("执行携程数量:", len(TaskChan))
 		}
 	}
 }

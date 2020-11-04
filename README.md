@@ -25,11 +25,13 @@ import (
 	"log"
 )
 
+
 func init(){
-	corn.AddCorn(test,"*/5 * * * * *","test")
-	corn.AddCorn(test1,"*/2 * * * * *","test1")
-    //corn.RunCorn(500)
-	corn.RunCorn()
+    cornTask := corn.New()
+	cornTask.AddCorn(test,"*/5 * * * * *","test")
+	cornTask.AddCorn(test1,"*/2 * * * * *","test1")
+    //cornTask.RunCorn(500)
+	cornTask.RunCorn()
 }
 
 func test(){
@@ -47,6 +49,6 @@ func main(){
 
 ### 动态修改定时方法
 ```golang
-  AddIgnore("test")//增加定时任务限制
-  DelIgnore("teset")//取消定时任务限制
+  cornTask.AddIgnore("test")//增加定时任务限制
+  cornTask.DelIgnore("teset")//取消定时任务限制
 ```

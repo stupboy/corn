@@ -14,29 +14,40 @@ const (
 	DefaultTaskNum = 500 //默认携程数量
 )
 
-var (
-	CronList   []cronItem    //定时列表
-	record     itemRecord    //执行记录
-	MaxTasks   int           //最大任务数量
-	TaskChan   chan struct{} //任务携程
-	taskDebug  bool          //是否调试模式
-	ignoreList sync.Map      //跳过的map
-)
-
-// 添加跳过记录
-func AddIgnore(key string) {
-	ignoreList.Store(key, struct{}{})
+type ServerCron struct {
+	CronList   []CronItem    //定时列表
+	debug      bool          //是否调试模式
+	ignoreList sync.Map      //过滤map
+	taskChan   chan struct{} //任务channel
+	record     itemRecord    //任务执行记录
+	MaxTasks   int           //	最大执行任务数量
+	status     bool          //定时任务状态 true开启 false 暂停
 }
 
-// 删除跳过记录
-func DelIgnore(key string) {
-	ignoreList.Delete(key)
+// 定时开启
+func (s *ServerCron) Start() {
+	s.status = true
+}
+
+// 定时暂停
+func (s *ServerCron) Stop() {
+	s.status = false
 }
 
 // 执行记录
 type itemRecord struct {
 	m map[string]struct{}
 	s sync.Mutex
+}
+
+// 添加跳过记录
+func (s *ServerCron) AddIgnore(key string) {
+	s.ignoreList.Store(key, struct{}{})
+}
+
+// 删除跳过记录
+func (s *ServerCron) DelIgnore(key string) {
+	s.ignoreList.Delete(key)
 }
 
 // 添加记录
@@ -66,39 +77,40 @@ func (i *itemRecord) del(key string) {
 }
 
 // 定时项目
-type cronItem struct {
+type CronItem struct {
 	f   func()
-	c   string
-	key string
+	C   string
+	Key string
 }
 
-func init() {
-	CronList = make([]cronItem, 0)
-	record.m = make(map[string]struct{}, 0)
-
+func New() (cron ServerCron) {
+	cron.CronList = make([]CronItem, 0)
+	cron.record.m = make(map[string]struct{}, 0)
+	cron.status = true
+	return cron
 }
 
 // 开启调试模式
-func StartDebug() {
-	taskDebug = true
+func (s *ServerCron) StartDebug() {
+	s.debug = true
 }
 
 // 执行定时服务
-func RunCorn(taskNum ...int) {
-	MaxTasks = DefaultTaskNum
+func (s *ServerCron) RunCorn(taskNum ...int) {
+	s.MaxTasks = DefaultTaskNum
 	if len(taskNum) > 0 {
-		MaxTasks = taskNum[0]
+		s.MaxTasks = taskNum[0]
 	}
-	if MaxTasks < MinTaskNum+len(CronList) {
-		MaxTasks = MinTaskNum + len(CronList)
-		log.Println("定时任务数量必须大于:", MinTaskNum+len(CronList))
+	if s.MaxTasks < MinTaskNum+len(s.CronList) {
+		s.MaxTasks = MinTaskNum + len(s.CronList)
+		log.Println("定时任务数量必须大于:", MinTaskNum+len(s.CronList))
 	}
-	TaskChan = make(chan struct{}, MaxTasks)
-	go CronServer() //开启定时携程
+	s.taskChan = make(chan struct{}, s.MaxTasks)
+	go s.cronServer() //开启定时携程
 }
 
 // 添加定时列表
-func AddCorn(f func(), TimeStr string, argus ...string) {
+func (s *ServerCron) AddCorn(f func(), TimeStr string, argus ...string) {
 	var (
 		key string
 	)
@@ -106,47 +118,47 @@ func AddCorn(f func(), TimeStr string, argus ...string) {
 	if len(argus) > 0 {
 		key = argus[0]
 	}
-	CronList = append(CronList, cronItem{
+	s.CronList = append(s.CronList, CronItem{
 		f:   f,
-		c:   TimeStr,
-		key: key,
+		C:   TimeStr,
+		Key: key,
 	})
 }
 
 // 遍历执行列表
-func doCronList() {
+func (s *ServerCron) doCronList() {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Println("定时任务出错")
 		}
-		<-TaskChan //列表携程退出
+		<-s.taskChan //列表携程退出
 	}()
 	t := time.Now().Format("2006-01-02 15:04:05")
-	for _, i := range CronList {
-		_, ok := ignoreList.Load(i.key)
+	for _, i := range s.CronList {
+		_, ok := s.ignoreList.Load(i.Key)
 		if ok {
 			continue //在忽略列表中则退出
 		}
 		select {
-		case TaskChan <- struct{}{}:
-			go analyzeCron(i, t)
+		case s.taskChan <- struct{}{}:
+			go s.analyzeCron(i, t)
 		case <-time.After(TaskTimeOut * time.Millisecond):
-			log.Println("任务被跳过:", i.c, i.key)
+			log.Println("任务被跳过:", i.C, i.Key)
 		}
 	}
 }
 
 // 解析定时
-func analyzeCron(item cronItem, t string) {
+func (s *ServerCron) analyzeCron(item CronItem, t string) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Println("定时任务执行错误：", r)
-			record.del(item.key)
+			s.record.del(item.Key)
 		}
-		<-TaskChan //定时明细退出
+		<-s.taskChan //定时明细退出
 		//log.Println("携程数量:", len(TaskChan))
 	}()
-	cs := strings.Split(item.c, " ")
+	cs := strings.Split(item.C, " ")
 	if len(cs) != 6 {
 		return
 	}
@@ -160,11 +172,11 @@ func analyzeCron(item cronItem, t string) {
 	if analyzeTime(cs[0], t[17:19]) {
 		return
 	}
-	if record.add(item.key) {
+	if s.record.add(item.Key) {
 		return
 	}
 	item.f()
-	record.del(item.key)
+	s.record.del(item.Key)
 }
 
 // 解析时间
@@ -220,30 +232,33 @@ func analyzeTime(a, b string) bool {
 }
 
 // 定时服务
-func CronServer() {
+func (s *ServerCron) cronServer() {
 	for {
-		serverGo()
+		s.serverGo()
 	}
 }
 
 // 服务携程
-func serverGo() {
+func (s *ServerCron) serverGo() {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Println("错误", r)
 		}
 	}()
+	if !s.status { //任务被暂停
+		return
+	}
 	select {
 	case <-time.After(time.Second): //每秒执行一次
-		if taskDebug {
-			log.Println("正在执行携程数量:", len(TaskChan))
+		if s.debug {
+			log.Println("正在执行携程数量:", len(s.taskChan))
 		}
 		select {
-		case TaskChan <- struct{}{}:
-			go doCronList()
+		case s.taskChan <- struct{}{}:
+			go s.doCronList()
 		case <-time.After(TaskTimeOut * time.Millisecond): //500毫秒内未分配则跳过定时
 			log.Println("任务执行队列已满，跳过时间点:", time.Now().Unix())
-			log.Println("执行携程数量:", len(TaskChan))
+			log.Println("执行携程数量:", len(s.taskChan))
 		}
 	}
 }

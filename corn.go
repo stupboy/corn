@@ -172,7 +172,7 @@ func (s *ServerCron) analyzeCron(item CronItem, t string) {
 	if analyzeTime(cs[0], t[17:19]) {
 		return
 	}
-	if analyzeTime(cs[3], t[17:19]) {
+	if analyzeTime(cs[3], t[8:10]) {
 		return
 	}
 	if s.record.add(item.Key) {

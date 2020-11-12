@@ -133,7 +133,9 @@ func (s *ServerCron) doCronList() {
 		}
 		<-s.taskChan //列表携程退出
 	}()
-	t := time.Now().Format("2006-01-02 15:04:05")
+	nt := time.Now()
+	// 拼接周字符到末尾
+	t := nt.Format("2006-01-02 15:04:05") + " " + strconv.Itoa(int(nt.Weekday()))
 	for _, i := range s.CronList {
 		_, ok := s.ignoreList.Load(i.Key)
 		if ok {
@@ -176,6 +178,9 @@ func (s *ServerCron) analyzeCron(item CronItem, t string) {
 		return
 	}
 	if analyzeTime(cs[5], t[5:7]) { //月
+		return
+	}
+	if analyzeTime(cs[4], t[20:21]) { //周
 		return
 	}
 	if s.record.add(item.Key) {

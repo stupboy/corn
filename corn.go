@@ -184,6 +184,7 @@ func (s *ServerCron) analyzeCron(item CronItem, t string) {
 		return
 	}
 	if s.record.add(item.Key) {
+		log.Println("===上一个定时任务还未执行完，跳过本次执行===")
 		return
 	}
 	item.f()

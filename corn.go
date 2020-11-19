@@ -112,6 +112,11 @@ func (s *ServerCron) GetTaskList() (data []TaskList) {
 
 // 手动执行定时任务 isForce是否忽略正在执行任务
 func (s *ServerCron) DoTask(code int, isForce bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("手动执行定时任务出错！！")
+		}
+	}()
 	if len(s.CronList) < code {
 		log.Println("定时任务不存在")
 		return

@@ -78,9 +78,17 @@ func (i *itemRecord) del(key string) {
 
 // 定时项目
 type CronItem struct {
-	f   func()
-	C   string
-	Key string
+	f    func()
+	C    string
+	Key  string
+	Desc string
+}
+
+// 定时序列
+type TaskList struct {
+	Code int    `json:"code"` //方法序号
+	Key  string `json:"key"`  //方法key
+	Desc string `json:"desc"` //方法描述
 }
 
 func New() (cron ServerCron) {
@@ -88,6 +96,37 @@ func New() (cron ServerCron) {
 	cron.record.m = make(map[string]struct{}, 0)
 	cron.status = true
 	return cron
+}
+
+// 获取系统中定时任务列表
+func (s *ServerCron) GetTaskList() (data []TaskList) {
+	for k, c := range s.CronList {
+		data = append(data, TaskList{
+			Code: k,
+			Key:  c.Key,
+			Desc: c.Desc,
+		})
+	}
+	return data
+}
+
+// 手动执行定时任务 isForce是否忽略正在执行任务
+func (s *ServerCron) DoTask(code int, isForce bool) {
+	if len(s.CronList) < code {
+		log.Println("定时任务不存在")
+		return
+	}
+	c := s.CronList[code]
+	if isForce {
+		c.f()
+		return
+	}
+	if s.record.add(c.Key) {
+		log.Println("===上一个定时任务还未执行完，跳过本次执行===")
+		return
+	}
+	c.f()
+	s.record.del(c.Key)
 }
 
 // 开启调试模式
@@ -112,16 +151,22 @@ func (s *ServerCron) RunCorn(taskNum ...int) {
 // 添加定时列表
 func (s *ServerCron) AddCorn(f func(), TimeStr string, argus ...string) {
 	var (
-		key string
+		key, Desc string
 	)
 	key = "none"
-	if len(argus) > 0 {
+	Desc = "none"
+	if len(argus) > 0 { //有填写key
 		key = argus[0]
+		Desc = key
+	}
+	if len(argus) > 1 { //有填写描述
+		Desc = argus[1]
 	}
 	s.CronList = append(s.CronList, CronItem{
-		f:   f,
-		C:   TimeStr,
-		Key: key,
+		f:    f,
+		C:    TimeStr,
+		Key:  key,
+		Desc: Desc,
 	})
 }
 
